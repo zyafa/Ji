@@ -281,37 +281,56 @@ public class JiNode {
 	- returns: An array of JiNode, an empty array will be returned if XPath matches no nodes.
 	*/
 	public func xPath(xPath: String) -> [JiNode] {
-		let xPathContext = xmlXPathNewContext(self.document.xmlDoc)
-		if xPathContext == nil {
-			// Unable to create XPath context.
-			return []
-		}
-		
-		xPathContext.memory.node = self.xmlNode
-		
-		let xPathObject = xmlXPathEvalExpression(UnsafePointer<xmlChar>(xPath.cStringUsingEncoding(NSUTF8StringEncoding)!), xPathContext)
-		xmlXPathFreeContext(xPathContext)
-		if xPathObject == nil {
-			// Unable to evaluate XPath.
-			return []
-		}
-		
-		let nodeSet = xPathObject.memory.nodesetval
-		if nodeSet == nil || nodeSet.memory.nodeNr == 0 || nodeSet.memory.nodeTab == nil {
-			// NodeSet is nil.
+        let data = self.rawContent?.dataUsingEncoding(self.document.encoding)
+        guard let rawData = data else { return [] }
+        var doc: xmlDocPtr = nil
+        
+        let cBuffer = UnsafePointer<CChar>(rawData.bytes)
+        let cSize = CInt(rawData.length)
+        
+        // Create document from node's raw content
+        if self.document.isXML {
+            let options = CInt(XML_PARSE_RECOVER.rawValue)
+            doc = xmlReadMemory(cBuffer, cSize, nil, nil, options)
+        } else {
+            let options = CInt(HTML_PARSE_NOWARNING.rawValue | HTML_PARSE_NOERROR.rawValue)
+            doc = htmlReadMemory(cBuffer, cSize, nil, nil, options)
+        }
+        if doc == nil {
+            doc = self.xmlNode.memory.doc
+        }
+        
+        let xPathContext = xmlXPathNewContext(doc)
+        if xPathContext == nil {
+            // Unable to create XPath context.
+            return []
+        }
+        
+        xPathContext.memory.node = self.xmlNode
+        
+        let xPathObject = xmlXPathEvalExpression(UnsafePointer<xmlChar>(xPath.cStringUsingEncoding(NSUTF8StringEncoding)!), xPathContext)
+        xmlXPathFreeContext(xPathContext)
+        if xPathObject == nil {
+            // Unable to evaluate XPath.
+            return []
+        }
+        
+        let nodeSet = xPathObject.memory.nodesetval
+        if nodeSet == nil || nodeSet.memory.nodeNr == 0 || nodeSet.memory.nodeTab == nil {
+            // NodeSet is nil.
             xmlXPathFreeObject(xPathObject)
-			return []
-		}
-		
-		var resultNodes = [JiNode]()
-		for i in 0 ..< Int(nodeSet.memory.nodeNr) {
-			let jiNode = JiNode(xmlNode: nodeSet.memory.nodeTab[i], jiDocument: self.document, keepTextNode: keepTextNode)
-			resultNodes.append(jiNode)
-		}
-		
-		xmlXPathFreeObject(xPathObject)
-		
-		return resultNodes
+            return []
+        }
+        
+        var resultNodes = [JiNode]()
+        for i in 0 ..< Int(nodeSet.memory.nodeNr) {
+            let jiNode = JiNode(xmlNode: nodeSet.memory.nodeTab[i], jiDocument: self.document, keepTextNode: keepTextNode)
+            resultNodes.append(jiNode)
+        }
+        
+        xmlXPathFreeObject(xPathObject)
+        
+        return resultNodes
 	}
 	
 	
